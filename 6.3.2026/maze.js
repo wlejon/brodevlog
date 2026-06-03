@@ -131,16 +131,17 @@ globalThis.buildMaze = function buildMaze() {
   const NW = wallCells.length;
   const wallBuf = new Float32Array(NW * 16);
   const WALL_RGB = [0.13, 0.16, 0.24];
-  function writeWall(slot, c, h) {
+  const SUNK = -300;   // park not-yet-shown instances far below the ground
+  function writeWall(slot, c, h, hidden) {
     const o = slot * 16, sxz = CS;
     const hh = Math.max(0.0001, h);
-    // a low rim of warm light along the very top edge as it settles in
+    const ty = hidden ? SUNK : hh / 2;
     wallBuf[o] = sxz; wallBuf[o + 1] = 0;  wallBuf[o + 2] = 0;   wallBuf[o + 3] = wx(c.gx);
-    wallBuf[o + 4] = 0;  wallBuf[o + 5] = hh; wallBuf[o + 6] = 0; wallBuf[o + 7] = hh / 2;
+    wallBuf[o + 4] = 0;  wallBuf[o + 5] = hh; wallBuf[o + 6] = 0; wallBuf[o + 7] = ty;
     wallBuf[o + 8] = 0;  wallBuf[o + 9] = 0;  wallBuf[o + 10] = sxz; wallBuf[o + 11] = wz(c.gy);
     wallBuf[o + 12] = 1; wallBuf[o + 13] = 1; wallBuf[o + 14] = 1; wallBuf[o + 15] = 1;
   }
-  wallCells.forEach((c, s) => writeWall(s, c, 0));
+  wallCells.forEach((c, s) => writeWall(s, c, 0, true));
   const wallNode = scene.createInstancedMesh({
     mesh: Mesh.box(0.5, 0.5, 0.5), instances: wallBuf,
     color: WALL_RGB, metallic: 0.0, roughness: 0.7,
@@ -163,9 +164,9 @@ globalThis.buildMaze = function buildMaze() {
   const TILE = CS * 0.94, FY = 0.09, FTHK = 0.18;   // low glowing curbs (read at any angle)
   const DIM = [0.05, 0.08, 0.16];   // unlit base before the flood
   function writeFloor(slot, c, rgb, shown) {
-    const o = slot * 16, s = shown ? TILE : 0.0001;
+    const o = slot * 16, s = shown ? TILE : 0.0001, ty = shown ? FY : SUNK;
     floorBuf[o] = s; floorBuf[o + 1] = 0; floorBuf[o + 2] = 0;     floorBuf[o + 3] = wx(c.gx);
-    floorBuf[o + 4] = 0; floorBuf[o + 5] = FTHK; floorBuf[o + 6] = 0; floorBuf[o + 7] = FY;
+    floorBuf[o + 4] = 0; floorBuf[o + 5] = FTHK; floorBuf[o + 6] = 0; floorBuf[o + 7] = ty;
     floorBuf[o + 8] = 0; floorBuf[o + 9] = 0; floorBuf[o + 10] = s;  floorBuf[o + 11] = wz(c.gy);
     floorBuf[o + 12] = rgb[0]; floorBuf[o + 13] = rgb[1]; floorBuf[o + 14] = rgb[2]; floorBuf[o + 15] = 1;
   }
@@ -226,7 +227,7 @@ globalThis.buildMaze = function buildMaze() {
     for (let s = 0; s < NW; s++) {
       const c = wallCells[s];
       const lp = clamp01((p - riseT[c.k]) / RISE);
-      writeWall(s, c, WH * (lp * lp * (3 - 2 * lp)));
+      writeWall(s, c, WH * (lp * lp * (3 - 2 * lp)), lp <= 0);
     }
     wallNode.setInstances(wallBuf);
     for (let s = 0; s < NF; s++) {

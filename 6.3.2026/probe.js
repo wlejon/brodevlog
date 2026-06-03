@@ -12,6 +12,13 @@ const lerpPt = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * 
 
 const TOP = span * 1.18, HI = span * 1.46;
 
+// 0. mid-carve — confirm no flat overlapping shapes on the plane
+maze.setBuildFront(0.4);
+const cw = maze.cursorAt(0.4); maze.setCursor(true, cw.x, cw.z);
+cam({ pos: [0, HI, TOP * 0.9], tgt: [0, 1.5, 0], fov: 46 });
+flush(); screenshot('probe_0_carve.png');
+maze.setCursor(false, 0, 0);
+
 // 1. carve done, dim floor — framing + legibility
 maze.setBuildFront(1);
 cam({ pos: [0, HI, TOP * 0.9], tgt: [0, 1.5, 0], fov: 46 });
@@ -35,14 +42,16 @@ const n = path.length, pathAt = (fp) => {
   const c = Math.max(0, Math.min(n - 1, fp)), i = Math.min(n - 2, Math.floor(c));
   return lerpPt(path[i], path[i + 1], c - i);
 };
-function diveShot(uf, name) {
-  const fp = uf * (n - 1);
-  const lead = pathAt(fp), back = pathAt(fp - 2.6);
-  maze.moveOrb(true, lead.x, lead.z, 0.7);
-  cam({ pos: [back.x, 5.5, back.z], tgt: [lead.x, 0.5, lead.z], fov: 62 });
+// 4. dive — steep isometric follow (fixed offset above + to the side of the orb,
+// matching studio.js), so the orb stays clear of walls and every turn is legible.
+function isoShot(uf, name) {
+  const o = pathAt(uf * (n - 1));
+  maze.moveOrb(true, o.x, o.z, 0.7);
+  cam({ pos: [o.x + 5, 15, o.z + 5], tgt: [o.x, 0.4, o.z], fov: 50 });
   flush(); screenshot(name);
 }
-diveShot(0.32, 'probe_4_dive.png');
-diveShot(0.72, 'probe_5_dive.png');
+isoShot(0.20, 'probe_4_dive.png');
+isoShot(0.55, 'probe_5_dive.png');
+isoShot(0.85, 'probe_6_dive.png');
 
 console.log('probe done: span=' + span.toFixed(1) + ' pathLen=' + path.length);

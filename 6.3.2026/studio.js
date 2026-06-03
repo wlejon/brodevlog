@@ -52,16 +52,16 @@ const ACTS = {
 // ---- narration: each line names exactly what's on screen at that beat -------
 const beats = [
   { act: 'build', text: 'This maze builds itself.' },
-  { act: 'build', text: 'A depth-first walk carves the grid, cell by cell.' },
-  { act: 'build', text: 'Every wall is one instance in a single draw call.' },
-  { act: 'flood', text: 'Then a search floods it from the entrance.' },
-  { act: 'flood', text: 'Breadth-first, each cell coloured by its distance.' },
-  { act: 'flood', text: 'That glow is a per-cell colour, pushed past white to bloom.' },
-  { act: 'solve', text: 'The shortest path drops out of the same search.' },
-  { act: 'solve', text: 'Entrance to exit, the solution ignites.' },
-  { act: 'dive',  text: 'Then drop in and follow the solution.' },
-  { act: 'dive',  text: 'Real-time: instancing, shadows, and bloom.' },
-  { act: 'dive',  text: 'HTML, JavaScript, and a C plus plus engine.' },
+  { act: 'build', text: 'A single walker explores the grid, depth first.' },
+  { act: 'build', text: 'Backtracking at every dead end, until no cell is left.' },
+  { act: 'flood', text: 'Now, solve it.' },
+  { act: 'flood', text: 'A wave spreads out from the entrance, one ring at a time.' },
+  { act: 'flood', text: 'Each cell coloured by how far the wave has come.' },
+  { act: 'solve', text: 'And every cell remembers where the wave came from.' },
+  { act: 'solve', text: 'Trace that back from the exit, and the path lights up.' },
+  { act: 'dive',  text: 'Between any two cells, there is exactly one route.' },
+  { act: 'dive',  text: 'No loops, no shortcuts.' },
+  { act: 'dive',  text: 'So just follow it out.' },
 ];
 
 // ---- TTS -------------------------------------------------------------------
@@ -214,20 +214,21 @@ path.forEach((cell, i) => {
 });
 // BFS gives the shortest path for free` },
 
-  dive: { file: 'render.js', badge: 'real-time', code:
-`// one mesh, thousands of copies, one draw call
+  dive: { file: 'render.js', badge: 'two draws / frame', code:
+`// the whole maze is two instanced meshes
 scene.createInstancedMesh({
-  mesh: Mesh.box(),
-  instances: walls,      // 16 floats each:
-});                       // transform + RGBA tint
+  mesh: Mesh.box(),       // the walls
+  instances: walls,       // 16 floats each:
+});                        // transform + RGBA tint
 
-scene.setShadowQuality(4096, 3);   // 4 cascades
-scene.createLight({ type: 'directional', ... });
-scene.setBloom({ threshold: 1.0, intensity: 0.7 });
-scene.setToneMap({ mode: 'aces' });
+scene.createInstancedMesh({
+  mesh: Mesh.box(),       // the floor tiles
+  instances: tiles,       // tint > 1.0 -> it blooms
+});
 
-// the scene, the captions, and THIS panel
-// are all HTML / CSS / JS, composited live.` },
+// re-colour a tile = rewrite its four tint floats
+tile.tint = GOLD;
+// thousands of cells, two draws a frame` },
 };
 
 function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
@@ -295,9 +296,10 @@ function updatePanel(act, t, sp, floodP, solP) {
   else viz.style.opacity = '0';
 }
 
-// ---- dive: a descending chase that follows the orb down the lit solution ---
-// The camera rides a few cells BEHIND the orb (always over open corridor, so it
-// never buries into a wall), dropping from a high view to a low skim as it goes.
+// ---- dive: a steep isometric follow that tracks the orb running the route ---
+// The camera holds a fixed offset above + to the side of the orb, so the maze
+// stays laid out around it and every turn is legible. It settles in from a
+// higher, wider view over the first moment of the act.
 const pathAt = (fp) => {
   const n = path.length;
   const c = Math.max(0, Math.min(n - 1, fp));
@@ -305,18 +307,13 @@ const pathAt = (fp) => {
   return lerpPt(path[i], path[i + 1], tt);
 };
 function diveCam(u, t) {
-  const n = path.length;
-  const fp = clamp01(u) * (n - 1);
-  const lead = pathAt(fp);                       // where the orb is
-  const back = pathAt(fp - 2.6);                 // camera sits just behind it
-  const drop = smooth(Math.min(u / 0.16, 1));    // ease down from high to a low follow
-  const hgt = 13.0 + (5.2 - 13.0) * drop;
-  const bob = Math.sin(t * 3.0) * 0.06 * drop;
-  return {
-    pos: [back.x, hgt + bob, back.z],
-    tgt: [lead.x, 0.5, lead.z],
-    fov: 56 + 6 * drop,
-  };
+  const o = pathAt(clamp01(u) * (path.length - 1));   // orb position
+  const drop = smooth(Math.min(u / 0.18, 1));         // settle from wide to the follow
+  const ox = 7.5 + (5.0 - 7.5) * drop;
+  const hy = 22.0 + (15.0 - 22.0) * drop;
+  const oz = 7.5 + (5.0 - 7.5) * drop;
+  const bob = Math.sin(t * 2.2) * 0.05 * drop;
+  return { pos: [o.x + ox, hy + bob, o.z + oz], tgt: [o.x, 0.4, o.z], fov: 50 };
 }
 function orbAhead(u) { return pathAt(clamp01(u) * (path.length - 1)); }
 
@@ -366,9 +363,10 @@ for (let f = 0; f < totalFrames; f++) {
     if (!builtFull) { setBuildFront(1); builtFull = true; }
     setFloodFront(1); setSolutionFront(1);
     floodP = 1; solP = 1;
-    const o = orbAhead(su);
-    moveOrb(true, o.x, o.z, 1.0);
-    setCam(diveCam(su, t));
+    const du = smooth(clamp01(u));        // ease the run in and out
+    const o = orbAhead(du);
+    moveOrb(true, o.x, o.z, 0.7);
+    setCam(diveCam(du, t));
   }
 
   updatePanel(act, t, sp, floodP, solP);
