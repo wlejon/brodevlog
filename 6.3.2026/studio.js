@@ -61,7 +61,8 @@ const beats = [
   { act: 'solve', text: 'Trace that back from the exit, and the path lights up.' },
   { act: 'dive',  text: 'Between any two cells, there is exactly one route.' },
   { act: 'dive',  text: 'No loops, no shortcuts.' },
-  { act: 'dive',  text: 'So just follow it out.' },
+  { act: 'dive',  text: 'Just one path, all the way through.' },
+  { act: 'dive',  text: 'So follow it out.' },
 ];
 
 // ---- TTS -------------------------------------------------------------------
@@ -308,12 +309,14 @@ const pathAt = (fp) => {
 };
 function diveCam(u, t) {
   const o = pathAt(clamp01(u) * (path.length - 1));   // orb position
-  const drop = smooth(Math.min(u / 0.18, 1));         // settle from wide to the follow
-  const ox = 7.5 + (5.0 - 7.5) * drop;
-  const hy = 22.0 + (15.0 - 22.0) * drop;
-  const oz = 7.5 + (5.0 - 7.5) * drop;
-  const bob = Math.sin(t * 2.2) * 0.05 * drop;
-  return { pos: [o.x + ox, hy + bob, o.z + oz], tgt: [o.x, 0.4, o.z], fov: 50 };
+  // Pulled well out, so tracking the orb reads as a subtle glide, not a fast
+  // scroll. A slow outward drift over the act is the only deliberate motion.
+  const k = smooth(clamp01(u));
+  const ox = 15.0 + 4.0 * k;
+  const hy = 30.0 + 7.0 * k;
+  const oz = 15.0 + 4.0 * k;
+  const bob = Math.sin(t * 1.5) * 0.04;
+  return { pos: [o.x + ox, hy + bob, o.z + oz], tgt: [o.x, 0.5, o.z], fov: 46 };
 }
 function orbAhead(u) { return pathAt(clamp01(u) * (path.length - 1)); }
 

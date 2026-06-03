@@ -184,8 +184,8 @@ globalThis.buildMaze = function buildMaze() {
   });
   cursor.visible = false;
   const orb = scene.createMesh({
-    data: Mesh.sphere(0.5, 22, 16), x: 0, y: 0.7, z: 0,
-    color: [1.0, 0.8, 0.3], emissive: 5.0, emissiveColor: [3.0, 2.0, 0.6], unlit: true,
+    data: Mesh.sphere(0.72, 24, 18), x: 0, y: 0.7, z: 0,
+    color: [1.0, 0.8, 0.3], emissive: 5.5, emissiveColor: [3.2, 2.1, 0.65], unlit: true,
   });
   orb.visible = false;
 

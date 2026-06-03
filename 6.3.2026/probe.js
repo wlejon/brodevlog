@@ -42,16 +42,17 @@ const n = path.length, pathAt = (fp) => {
   const c = Math.max(0, Math.min(n - 1, fp)), i = Math.min(n - 2, Math.floor(c));
   return lerpPt(path[i], path[i + 1], c - i);
 };
-// 4. dive — steep isometric follow (fixed offset above + to the side of the orb,
-// matching studio.js), so the orb stays clear of walls and every turn is legible.
-function isoShot(uf, name) {
+// 4. dive — pulled-out isometric follow: far enough that the orb's run reads as
+// a subtle glide, not a fast scroll. Compare a few distances.
+function isoShot(uf, ox, hy, oz, fov, name) {
   const o = pathAt(uf * (n - 1));
   maze.moveOrb(true, o.x, o.z, 0.7);
-  cam({ pos: [o.x + 5, 15, o.z + 5], tgt: [o.x, 0.4, o.z], fov: 50 });
+  cam({ pos: [o.x + ox, hy, o.z + oz], tgt: [o.x, 0.4, o.z], fov });
   flush(); screenshot(name);
 }
-isoShot(0.20, 'probe_4_dive.png');
-isoShot(0.55, 'probe_5_dive.png');
-isoShot(0.85, 'probe_6_dive.png');
+// final framing (matches studio.js: offset 15->19 drifting out over the act)
+isoShot(0.15, 15, 30, 15, 46, 'probe_4_dive.png');
+isoShot(0.55, 17, 33.5, 17, 46, 'probe_5_dive.png');
+isoShot(0.90, 19, 37, 19, 46, 'probe_6_dive.png');
 
 console.log('probe done: span=' + span.toFixed(1) + ' pathLen=' + path.length);
