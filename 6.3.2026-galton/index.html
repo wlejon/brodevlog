@@ -1,0 +1,113 @@
+<!doctype html>
+<html>
+<head>
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
+  /* Warm, slightly purple-charcoal backdrop so the amber/coral/teal marbles and
+     their bloom read like arcade glass. (The maze devlog was cool neon-blue;
+     this one runs warm on purpose.) */
+  body { background: radial-gradient(125% 85% at 50% 16%,
+    #221826 0%, #181020 36%, #0e0914 66%, #070409 100%); }
+  #stage { display: block; width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
+
+  /* Bottom scrim → lifts caption contrast over the busy pile. */
+  #scrim {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 38%;
+    background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(8,4,10,0.18) 45%, rgba(8,3,10,0.7) 100%);
+    pointer-events: none;
+  }
+
+  /* Kinetic caption overlay (captured by addViewportFrame over the scene). */
+  #cap {
+    position: absolute; left: 0; right: 0;
+    bottom: 15%;
+    text-align: center;
+    padding: 0 6%;
+    font-family: 'Arial Black', Arial, sans-serif;
+    font-weight: 900;
+    font-size: 66px;
+    color: #ffffff;
+    text-transform: uppercase;
+  }
+  #cap .w {
+    display: inline-block;
+    line-height: 1.0;
+    vertical-align: middle;
+    margin: 7px 9px;
+    padding: 0 18px 4px;
+    border-radius: 12px;
+    background: rgba(24,14,22,0.66);
+    color: rgba(255,255,255,0.5);
+    text-shadow: 0 2px 5px rgba(0,0,0,0.85);
+  }
+  #cap .w.on  { color: #ffffff; }
+  #cap .w.hot { background: #ffb13c; color: #2a1402; }   /* the word being spoken */
+
+  /* ---- "show the thing you're saying" overlays --------------------------- */
+  #panel {
+    position: absolute; left: 36px; right: 36px; top: 52px; height: 612px;
+    background: rgba(18,12,20,0.82);
+    border: 1px solid rgba(255,190,120,0.14);
+    border-radius: 20px; overflow: hidden;
+    box-shadow: 0 18px 60px rgba(0,0,0,0.6);
+    opacity: 0;
+    display: flex; flex-direction: column;
+  }
+  #panel .bar {
+    display: flex; align-items: center; height: 56px; flex: none;
+    padding: 0 22px; gap: 12px;
+    background: rgba(255,255,255,0.04);
+    border-bottom: 1px solid rgba(255,190,120,0.12);
+    font-family: 'Consolas','Courier New',monospace;
+  }
+  #panel .dot { width: 14px; height: 14px; border-radius: 50%; }
+  #panel .d1 { background: #ff5f57; } #panel .d2 { background: #febc2e; } #panel .d3 { background: #28c840; }
+  #barfile { margin-left: 10px; color: #d8b89a; font-size: 26px; }
+  #barbadge {
+    margin-left: auto; color: #2a1402; background: #ffb13c;
+    font-size: 24px; font-weight: 700; padding: 4px 14px; border-radius: 20px;
+  }
+  .codewrap { height: 556px; overflow: hidden; }
+  #code {
+    margin: 0; padding: 18px 26px;
+    font-family: 'Consolas','Courier New',monospace;
+    font-size: 27px; line-height: 36px; white-space: pre;
+    color: #e4d3c4; will-change: transform;
+  }
+  #code .kw { color: #f7a35c; }
+  #code .st { color: #c3e88d; }
+  #code .cm { color: #7a6a78; font-style: italic; }
+  #code .nu { color: #ff8b6c; }
+  #code .fn { color: #ffd089; }
+
+  /* Live histogram of where the marbles land, drawn with Canvas 2D — it fills
+     bin by bin alongside the physical pile, then a fitted Gaussian draws over
+     it for the payoff. */
+  #viz {
+    position: absolute; right: 48px; top: 700px; width: 320px;
+    background: rgba(18,12,20,0.84);
+    border: 1px solid rgba(255,190,120,0.14);
+    border-radius: 16px; padding: 14px; opacity: 0;
+    box-shadow: 0 14px 50px rgba(0,0,0,0.55);
+  }
+  #hist { width: 292px; height: 210px; display: block; border-radius: 8px; background: #0c0710; }
+  #vizlabel {
+    margin-top: 10px; text-align: center;
+    font-family: 'Consolas','Courier New',monospace;
+    font-size: 22px; color: #d8b89a;
+  }
+</style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <div id="scrim"></div>
+  <div id="panel">
+    <div class="bar"><span class="dot d1"></span><span class="dot d2"></span><span class="dot d3"></span>
+      <span id="barfile">board.js</span><span id="barbadge"></span></div>
+    <div class="codewrap"><pre id="code"></pre></div>
+  </div>
+  <div id="viz"><canvas id="hist" width="292" height="210"></canvas><div id="vizlabel"></div></div>
+  <div id="cap"></div>
+  <script src="board.js"></script>
+</body>
+</html>
