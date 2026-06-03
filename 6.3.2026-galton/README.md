@@ -24,8 +24,10 @@ capability:
    and drawn over the running histogram: random walks always land here.
 
 Over the top: a Kokoro TTS voiceover with word-synced captions, a continuous
-(brighter, major-key) music bed, and live code/histogram overlays — themselves
-the engine's own HTML/CSS/JS, composited over the 3D scene.
+(brighter, major-key) music bed, a live histogram overlay (the engine's own
+HTML/CSS/Canvas, composited over the 3D scene), and a soft per-impact "tick"
+synthesized for every marble↔peg contact — a few gentle plinks under the lone
+marble, a downpour under the cascade.
 
 The narration is a devlog, not an ad — every line names exactly what is on
 screen at that moment.
@@ -55,9 +57,9 @@ world, fixed RNG, fixed substep — the same render every time.
 | File         | Role |
 |--------------|------|
 | `bro.json`   | App manifest (1080×1920 portrait). |
-| `index.html` | The DOM — `<canvas>` scene layer plus the caption, code-card, and histogram overlays. Loads `board.js`. |
-| `board.js`   | `buildBoard()` — the sandbox physics world (pegs, bins, reflecting walls), the instanced peg/divider/marble meshes, marble release + the per-frame transform→instance sync, and the bin counter. All physics tunables are overridable for calibration. |
-| `studio.js`  | The director — the acts/beats, TTS + captions + music, the four camera moves, the variable sim-speed + release schedule, the live histogram + fitted Gaussian, captured via `addViewportFrame`. |
+| `index.html` | The DOM — `<canvas>` scene layer plus the caption and histogram overlays. Loads `board.js`. |
+| `board.js`   | `buildBoard()` — the sandbox physics world (pegs, bins, reflecting walls), the instanced peg/divider/marble meshes, marble release + the per-frame transform→instance sync, the bin counter, and `pollPegHits()` (marble↔peg contacts, drained per substep, for the impact sounds). All physics tunables are overridable for calibration. |
+| `studio.js`  | The director — the acts/beats, TTS + captions + music + synthesized peg-impact clicks, the four camera moves, the variable sim-speed + release schedule, the live histogram + fitted Gaussian, captured via `addViewportFrame`. |
 | `probe.js`   | Fast no-TTS calibration: pours the board and shoots stills + prints the bin counts, to tune the look and confirm the bell before a full render. |
 
 ## Requirements

@@ -12,9 +12,13 @@
 
 const W = 1080, H = 1920, FPS = 30, SR = 24000;
 const board = buildBoard();
-const { scene, step, sync, releaseBall, binCounts, ballPos,
+const { scene, step, sync, releaseBall, binCounts, ballPos, pollPegHits,
         NB, NBINS, binCenter, topY, lastY, binTopY, floorY, halfW } = board;
 const cap = document.getElementById('cap');
+
+// deterministic RNG for the per-click pitch / timing variation
+let aseed = 0x9e3779b9;
+const arnd = () => { aseed = (Math.imul(aseed, 1664525) + 1013904223) >>> 0; return aseed / 4294967296; };
 
 // ---- math helpers ----------------------------------------------------------
 const clamp01 = (t) => t < 0 ? 0 : t > 1 ? 1 : t;
@@ -153,87 +157,13 @@ function renderCaption(b, tIn) {
   cap.innerHTML = html;
 }
 
-// ---- overlay code cards ----------------------------------------------------
-const panel = document.getElementById('panel');
-const codeEl = document.getElementById('code');
-const barFile = document.getElementById('barfile');
-const barBadge = document.getElementById('barbadge');
+// ---- overlay: live histogram (the code card was removed — it buried the action)
 const viz = document.getElementById('viz');
 const vizLabel = document.getElementById('vizlabel');
-
-const PANELS = {
-  one: { file: 'board.js', badge: 'one rigid body', code:
-`// one marble: a dynamic sphere, locked to the
-// board plane, dropped into a field of pegs.
-const tag = w.createBody({
-  shape: 'sphere', radius: BR,
-  dofs: '2d',           // x/y only — it can roll
-  restitution: 0.3,     // a little bounce
-  friction: 0.2,
-});
-
-// no path, no keyframes — just gravity + contacts
-w.setGravity(0, -12, 0);
-// every peg it meets is a solved collision` },
-
-  many: { file: 'board.js', badge: 'one instanced draw', viz: true, code:
-`// release the rest into the same pegboard
-for (let i = 0; i < 200; i++) releaseMarble();
-
-// each frame: step the sim, then sync ONE mesh
-w.step(dt);
-for (const m of marbles) {
-  const p = w.getTransform(m).position;
-  write(buf, m, p);     // 16 floats: xform + tint
-}
-ballNode.setInstances(buf);   // 200 marbles,
-                              // a single draw call` },
-
-  stacks: { file: 'board.js', badge: 'where they rest', viz: true, code:
-`// where did each marble come to rest?
-for (const m of marbles) {
-  const x = w.getTransform(m).position.x;
-  const k = nearestBin(x);    // its column
-  count[k]++;
-}
-// nothing is drawn into the bins —
-// the marbles themselves ARE the histogram,
-// stacked by gravity into columns` },
-
-  curve: { file: 'board.js', badge: 'normal distribution', viz: true, code:
-`// fit a Gaussian to what the marbles stacked
-const n = sum(count);
-let mean = 0;
-count.forEach((c, k) => mean += k * c / n);
-let varr = 0;
-count.forEach((c, k) => varr += c*(k-mean)**2 / n);
-
-// the curve they drew on their own:
-//   p(k) ∝ exp( -(k - mean)² / 2varr )
-// random walks always land here.` },
-};
-
-function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
-function highlight(src) {
-  return src.split('\n').map((line) => {
-    const ci = line.indexOf('//');
-    let code = ci >= 0 ? line.slice(0, ci) : line;
-    const comment = ci >= 0 ? line.slice(ci) : '';
-    let h = esc(code);
-    h = h.replace(/(['"`])(.*?)\1/g, (m) => `<span class="st">${m}</span>`);
-    h = h.replace(/\b(\d+\.?\d*)\b/g, '<span class="nu">$1</span>');
-    h = h.replace(/\b(const|let|var|function|return|for|if|else|new|of|in|true|false|null|while|break|continue)\b/g,
-                  '<span class="kw">$1</span>');
-    h = h.replace(/\b([A-Za-z_$][\w$]*)(\s*\()/g, '<span class="fn">$1</span>$2');
-    if (comment) h += `<span class="cm">${esc(comment)}</span>`;
-    return h;
-  }).join('\n');
-}
-
-const LINEH = 36, CODEAREA = 612 - 56 - 36;
 const FADE = 0.4;
-const maxScrollFor = {};
-for (const k in PANELS) maxScrollFor[k] = Math.max(0, PANELS[k].code.split('\n').length * LINEH + 18 - CODEAREA);
+// which acts show the live histogram (the code card is gone — it buried the
+// cascade; the histogram is the one overlay that earns its place).
+const VIZ_ACTS = { one: false, many: true, stacks: true, curve: true };
 
 // ---- live histogram (Canvas 2D) — fills with the pile, fits a Gaussian -----
 const hist = document.getElementById('hist');
@@ -275,24 +205,19 @@ function drawHist(counts, gaussianMix) {
   }
 }
 
-let panelAct = null;
-function updatePanel(act, t, sp, counts, gaussianMix) {
-  if (act !== panelAct) {
-    const p = PANELS[act];
-    barFile.textContent = p.file;
-    barBadge.textContent = p.badge;
-    codeEl.innerHTML = highlight(p.code);
-    viz.style.display = p.viz ? 'block' : 'none';
-    if (p.viz) vizLabel.textContent = act === 'curve' ? 'fit: μ, σ²' : 'count[bin]';
-    panelAct = act;
+let vizAct = null;
+function updateViz(act, t, sp, counts, gaussianMix) {
+  const show = VIZ_ACTS[act];
+  if (act !== vizAct) {
+    viz.style.display = show ? 'block' : 'none';
+    if (show) vizLabel.textContent = act === 'curve' ? 'fit: μ, σ²' : 'count[bin]';
+    vizAct = act;
   }
+  if (!show) { viz.style.opacity = '0'; return; }
   const dur = sp.t1 - sp.t0, tin = t - sp.t0;
-  const u = clamp01(tin / Math.max(0.001, dur));
-  codeEl.style.marginTop = `${-(maxScrollFor[act] * u).toFixed(1)}px`;
   const op = clamp01(Math.min(tin / FADE, (dur - tin) / FADE));
-  panel.style.opacity = op.toFixed(3);
-  if (PANELS[act].viz) { viz.style.opacity = op.toFixed(3); drawHist(counts, gaussianMix); }
-  else viz.style.opacity = '0';
+  viz.style.opacity = op.toFixed(3);
+  drawHist(counts, gaussianMix);
 }
 
 // ---- single-ball follow camera (act 'one') ---------------------------------
@@ -337,6 +262,8 @@ const enc = new VideoEncoder({
 
 const totalFrames = Math.ceil(totalSec * FPS);
 const DT = 1 / FPS;
+const clicks = [];                 // { time, speed } — one per marble↔peg touch
+const CLICKS_PER_FRAME_CAP = 6;    // keep dense cascade frames from turning to mush
 for (let f = 0; f < totalFrames; f++) {
   const t = f / FPS;
 
@@ -357,6 +284,13 @@ for (let f = 0; f < totalFrames; f++) {
   step(simDt);
   sync();
 
+  // ---- peg-impact sounds: one soft click per new marble↔peg touch this frame --
+  const hits = pollPegHits();
+  const nh = Math.min(hits.length, CLICKS_PER_FRAME_CAP);
+  for (let h = 0; h < nh; h++) {
+    clicks.push({ time: t + arnd() * DT, speed: hits[h] });   // jitter within the frame
+  }
+
   // ---- camera ----
   if (act === 'one') {
     setCam(oneCam(u));
@@ -367,7 +301,7 @@ for (let f = 0; f < totalFrames; f++) {
   // ---- overlays ----
   const counts = binCounts();
   const gaussianMix = act === 'curve' ? smooth(clamp01((u - 0.25) / 0.5)) : 0;
-  updatePanel(act, t, sp, counts, gaussianMix);
+  updateViz(act, t, sp, counts, gaussianMix);
 
   flush();
   enc.addViewportFrame();
@@ -375,6 +309,34 @@ for (let f = 0; f < totalFrames; f++) {
     console.log('frame ' + f + '/' + totalFrames + ' (' + t.toFixed(1) +
     's) act=' + act + ' released=' + board.released + ' settled=' + st); }
 }
+// ---- synthesize the peg-click track and mix it in --------------------------
+// Each marble↔peg touch becomes a short, glassy, fast-decaying "tick" — pitch
+// and decay varied a touch per click (marbles aren't identical), level scaled
+// by impact speed. The patter tracks the action: a few gentle plinks under the
+// lone marble, a downpour under the cascade.
+const TWO_PI = Math.PI * 2;
+const clickBuf = new Float32Array(N);
+for (const c of clicks) {
+  const s0 = Math.floor(c.time * SR);
+  if (s0 < 0 || s0 >= N) continue;
+  const f = 980 + arnd() * 760;                       // ~980–1740 Hz
+  const tau = 0.013 + arnd() * 0.007;                 // 13–20 ms decay
+  const amp = 0.12 * (0.4 + 0.6 * clamp01(c.speed / 9));
+  const len = Math.min(N - s0, Math.floor(0.06 * SR));
+  for (let i = 0; i < len; i++) {
+    const tt = i / SR, env = Math.exp(-tt / tau);
+    clickBuf[s0 + i] += (Math.sin(TWO_PI * f * tt) + 0.5 * Math.sin(TWO_PI * 2.01 * f * tt)) * env * amp;
+  }
+}
+let cpk = 0;
+for (let i = 0; i < N; i++) {
+  let v = mixBuf[i] + clickBuf[i];
+  v = v > 1 ? 1 : v < -1 ? -1 : v;
+  mixBuf[i] = v;
+  const a = clickBuf[i] < 0 ? -clickBuf[i] : clickBuf[i]; if (a > cpk) cpk = a;
+}
+console.log('clicks=' + clicks.length + ' clickPeak=' + cpk.toFixed(2));
+
 enc.addAudioFramesPCM(mixBuf);
 enc.finish();
 const fc = binCounts(); let cl = '', tot = 0; for (let k = 0; k < NBINS; k++) { cl += fc[k] + ' '; tot += fc[k]; }

@@ -46,6 +46,7 @@ globalThis.buildBoard = function buildBoard(tune) {
 
   // pegs: static spheres in a rectangular quincunx (alternate rows offset SP/2)
   const pegs = [];
+  const pegTags = new Set();                   // for marble↔peg contact sounds
   for (let r = 0; r < ROWS; r++) {
     const y = topY - r * SP;
     const odd = r & 1;
@@ -53,8 +54,9 @@ globalThis.buildBoard = function buildBoard(tune) {
     for (let c = 0; c < n; c++) {
       const x = (c - (n - 1) * 0.5) * SP;      // each row centred
       pegs.push({ x, y });
-      w.createBody({ shape: 'sphere', radius: PR, static: true,
+      const pt = w.createBody({ shape: 'sphere', radius: PR, static: true,
         position: { x, y, z: 0 }, restitution: T('pegRest', 0.35), friction: T('pegFric', 0.2) });
+      pegTags.add(pt);
     }
   }
 
@@ -156,10 +158,28 @@ globalThis.buildBoard = function buildBoard(tune) {
   }
 
   // ---- per-frame: step + sync instance buffer from physics -------------------
+  // We drain the contact queue after EVERY substep (not once per frame): when
+  // the sim runs fast there are ~20 substeps per rendered frame, and a marble
+  // can touch and leave a peg inside one of them — polling only per frame would
+  // miss most of the impacts that should make a sound.
   const SUB = 4, STEPDT = 1 / 60 / SUB;
+  let pendingHits = [];
+  function drainContacts() {
+    const evs = w.getContacts();
+    for (let i = 0; i < evs.length; i++) {
+      const e = evs[i];
+      if (e.type !== 'added') continue;
+      const p1 = pegTags.has(e.body1), p2 = pegTags.has(e.body2);
+      if (p1 === p2) continue;                       // exactly one peg
+      const marble = p1 ? e.body2 : e.body1;
+      let sp = 4;
+      try { const v = w.getVelocity(marble); if (v) sp = Math.hypot(v.linear.x, v.linear.y, v.linear.z); } catch (_) {}
+      pendingHits.push(sp);
+    }
+  }
   function step(dt) {
     const n = Math.max(1, Math.round(dt / STEPDT));
-    for (let s = 0; s < n; s++) w.step(STEPDT);
+    for (let s = 0; s < n; s++) { w.step(STEPDT); drainContacts(); }
   }
 
   function sync() {
@@ -184,6 +204,12 @@ globalThis.buildBoard = function buildBoard(tune) {
     return w.getTransform(live[i].tag).position;
   }
 
+  // ---- peg-impact events (for sound) ----------------------------------------
+  // Hand the studio the marble↔peg touches accumulated across this frame's
+  // substeps (each a speed, so a click's level can track how hard it hit), then
+  // clear. Marble↔marble / wall / floor contacts are ignored — only pegs sing.
+  function pollPegHits() { const h = pendingHits; pendingHits = []; return h; }
+
   // ---- histogram: count settled marbles per bin -----------------------------
   function binCounts() {
     const counts = new Int32Array(NBINS);
@@ -199,7 +225,7 @@ globalThis.buildBoard = function buildBoard(tune) {
   }
 
   return {
-    scene, W, H, step, sync, releaseBall, binCounts, ballPos,
+    scene, W, H, step, sync, releaseBall, binCounts, ballPos, pollPegHits,
     get released() { return live.length; },
     NB, NBINS, ROWS, SP, BR, binCenter, dividerX,
     topY, lastY, binTopY, floorY, halfW,
